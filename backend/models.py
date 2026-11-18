@@ -30,6 +30,11 @@ class Quiz(BaseModel):
     questions: list[QuizQuestion]
 
 
+class SavedQuiz(Quiz):
+    id: str
+    created_at: str
+
+
 # --- Course Models ---
 class CourseRequest(BaseModel):
     topic: str = Field(
@@ -63,3 +68,8 @@ class Course(BaseModel):
     title: str
     description: str
     modules: list[CourseModule]
+
+
+class SavedCourse(Course):
+    id: str
+    created_at: str
