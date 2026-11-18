@@ -1,7 +1,9 @@
 fastapi
 uvicorn
+streamlit
 google-genai
 python-dotenv
-pymongo
-streamlit
+pymongo[srv]
 requests
+
+
