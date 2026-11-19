@@ -2,121 +2,127 @@ import { useEffect, useState } from "react";
 import {
   AlertCircle,
   ArrowRight,
-  BookOpen,
-  BrainCircuit,
-  GraduationCap,
+  CheckCircle2,
+  HelpCircle,
   Loader2,
-  RefreshCw,
+  LogOut,
   Search,
   Sparkles,
+  Trash2,
+  Trophy,
+  UserPlus,
 } from "lucide-react";
 import {
+  deleteCourse,
+  deleteQuiz,
   fetchCourses,
   fetchQuizzes,
   generateCourse,
   generateQuiz,
 } from "./api";
+import { AuthModal } from "./components/AuthModal";
 import { CourseView } from "./components/CourseView";
+import { PastelCover } from "./components/PastelCovers";
 import { QuizView } from "./components/QuizView";
-import type { SavedCourse, SavedQuiz } from "./types";
+import {
+  getCurrentUser,
+  loadProgress,
+  logoutUser,
+  markItemGenerated,
+  recordQuizResult,
+  toggleLessonProgress,
+} from "./storage";
+import type { SavedCourse, SavedQuiz, UserProfile, UserProgress } from "./types";
 
-type Tab = "create" | "quizzes" | "courses";
-
-const SAMPLE_TOPICS = [
-  "Python Loops",
-  "Machine Learning",
-  "Solar System",
-  "SQL Basics",
-];
+type PageView =
+  | "library"
+  | "course-studio"
+  | "quiz-studio"
+  | "progress"
+  | "take-quiz"
+  | "view-course";
 
 export function App() {
-  const [activeTab, setActiveTab] = useState<Tab>("create");
+  const [view, setView] = useState<PageView>("library");
+  const [user, setUser] = useState<UserProfile | null>(() => getCurrentUser());
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [progress, setProgress] = useState<UserProgress>(() =>
+    loadProgress(getCurrentUser())
+  );
 
-  // Generator state
-  const [topic, setTopic] = useState("");
-  const [numQuestions, setNumQuestions] = useState(5);
-  const [numModules, setNumModules] = useState(4);
-  const [generating, setGenerating] = useState<"quiz" | "course" | null>(null);
+  // Data
+  const [courses, setCourses] = useState<SavedCourse[]>([]);
+  const [quizzes, setQuizzes] = useState<SavedQuiz[]>([]);
+  const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const [activeQuiz, setActiveQuiz] = useState<SavedQuiz | null>(null);
-  const [activeCourse, setActiveCourse] = useState<SavedCourse | null>(null);
-
-  // Saved library state
-  const [savedQuizzes, setSavedQuizzes] = useState<SavedQuiz[]>([]);
-  const [savedCourses, setSavedCourses] = useState<SavedCourse[]>([]);
-  const [loadingLibrary, setLoadingLibrary] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedSavedQuiz, setSelectedSavedQuiz] = useState<SavedQuiz | null>(
-    null
+  // Library filters
+  const [typeFilter, setTypeFilter] = useState<"all" | "courses" | "quizzes">(
+    "all"
   );
-  const [selectedSavedCourse, setSelectedSavedCourse] =
-    useState<SavedCourse | null>(null);
+  const [levelFilter, setLevelFilter] = useState<
+    "All" | "Beginner" | "Intermediate" | "Advanced"
+  >("All");
+  const [searchTerm, setSearchTerm] = useState("");
 
-  const loadLibrary = async () => {
-    setLoadingLibrary(true);
+  // Active viewers
+  const [activeCourse, setActiveCourse] = useState<SavedCourse | null>(null);
+  const [activeQuiz, setActiveQuiz] = useState<SavedQuiz | null>(null);
+
+  // Studio generation
+  const [courseTopic, setCourseTopic] = useState("");
+  const [numModules, setNumModules] = useState(3);
+  const [quizTopic, setQuizTopic] = useState("");
+  const [numQuestions, setNumQuestions] = useState(5);
+  const [generating, setGenerating] = useState<"course" | "quiz" | null>(null);
+
+  const loadData = async () => {
+    setLoading(true);
+    setErrorMsg(null);
     try {
-      const [quizzes, courses] = await Promise.all([
-        fetchQuizzes(),
-        fetchCourses(),
-      ]);
-      setSavedQuizzes(quizzes);
-      setSavedCourses(courses);
-      if (quizzes.length > 0 && !selectedSavedQuiz) {
-        setSelectedSavedQuiz(quizzes[0]);
-      }
-      if (courses.length > 0 && !selectedSavedCourse) {
-        setSelectedSavedCourse(courses[0]);
-      }
+      const [cList, qList] = await Promise.all([fetchCourses(), fetchQuizzes()]);
+      setCourses(cList);
+      setQuizzes(qList);
     } catch (err) {
       setErrorMsg(
-        err instanceof Error ? err.message : "Failed to load saved library."
+        err instanceof Error ? err.message : "Could not load library from backend."
       );
     } finally {
-      setLoadingLibrary(false);
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    void loadLibrary();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    void loadData();
   }, []);
 
-  const handleGenerateQuiz = async () => {
-    if (!topic.trim()) {
-      setErrorMsg("Please enter a topic first.");
-      return;
-    }
-    setErrorMsg(null);
-    setGenerating("quiz");
-    try {
-      const quiz = await generateQuiz(topic.trim(), numQuestions);
-      setActiveQuiz(quiz);
-      setActiveCourse(null);
-      setSavedQuizzes((prev) => [quiz, ...prev]);
-      setSelectedSavedQuiz(quiz);
-    } catch (err) {
-      setErrorMsg(
-        err instanceof Error ? err.message : "Failed to generate quiz."
-      );
-    } finally {
-      setGenerating(null);
-    }
+  const handleAuthSuccess = (loggedInUser: UserProfile) => {
+    setUser(loggedInUser);
+    setProgress(loadProgress(loggedInUser));
+    setShowAuthModal(false);
   };
 
-  const handleGenerateCourse = async () => {
-    if (!topic.trim()) {
-      setErrorMsg("Please enter a topic first.");
+  const handleLogout = () => {
+    logoutUser();
+    setUser(null);
+    setProgress(loadProgress(null));
+  };
+
+  const handleGenerateCourse = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!courseTopic.trim()) {
+      setErrorMsg("Please enter a course topic.");
       return;
     }
     setErrorMsg(null);
     setGenerating("course");
     try {
-      const course = await generateCourse(topic.trim(), numModules);
-      setActiveCourse(course);
-      setActiveQuiz(null);
-      setSavedCourses((prev) => [course, ...prev]);
-      setSelectedSavedCourse(course);
+      const created = await generateCourse(courseTopic.trim(), numModules);
+      setCourses((prev) => [created, ...prev]);
+      setProgress(markItemGenerated(user, created.id));
+      setActiveCourse(created);
+      setCourseTopic("");
+      setView("view-course");
     } catch (err) {
       setErrorMsg(
         err instanceof Error ? err.message : "Failed to generate course."
@@ -126,409 +132,738 @@ export function App() {
     }
   };
 
-  const filteredQuizzes = savedQuizzes.filter(
-    (q) =>
-      q.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      q.topic.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const handleGenerateQuiz = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quizTopic.trim()) {
+      setErrorMsg("Please enter a quiz topic.");
+      return;
+    }
+    setErrorMsg(null);
+    setGenerating("quiz");
+    try {
+      const created = await generateQuiz(quizTopic.trim(), numQuestions);
+      setQuizzes((prev) => [created, ...prev]);
+      setProgress(markItemGenerated(user, created.id));
+      setActiveQuiz(created);
+      setQuizTopic("");
+      setView("take-quiz");
+    } catch (err) {
+      setErrorMsg(
+        err instanceof Error ? err.message : "Failed to generate quiz."
+      );
+    } finally {
+      setGenerating(null);
+    }
+  };
 
-  const filteredCourses = savedCourses.filter(
-    (c) =>
+  const handleDeleteCourse = async (courseId: string) => {
+    try {
+      await deleteCourse(courseId);
+      setCourses((prev) => prev.filter((c) => c.id !== courseId));
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Delete failed.");
+    }
+  };
+
+  const handleDeleteQuiz = async (quizId: string) => {
+    try {
+      await deleteQuiz(quizId);
+      setQuizzes((prev) => prev.filter((q) => q.id !== quizId));
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Delete failed.");
+    }
+  };
+
+  const filteredCourses = courses.filter((c) => {
+    const matchesLevel = levelFilter === "All" || c.difficulty === levelFilter;
+    const matchesSearch =
       c.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.topic.toLowerCase().includes(searchTerm.toLowerCase())
+      c.topic.toLowerCase().includes(searchTerm.toLowerCase());
+    return matchesLevel && matchesSearch;
+  });
+
+  const filteredQuizzes = quizzes.filter((q) => {
+    const matchesLevel = levelFilter === "All" || q.difficulty === levelFilter;
+    const matchesSearch =
+      q.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      q.topic.toLowerCase().includes(searchTerm.toLowerCase());
+    return matchesLevel && matchesSearch;
+  });
+
+  // Progress Stats
+  const totalLessonsCompleted = Object.values(progress.completedLessons).reduce(
+    (sum, list) => sum + list.length,
+    0
   );
+  const avgQuizScore =
+    progress.quizAttempts.length > 0
+      ? Math.round(
+          progress.quizAttempts.reduce((s, a) => s + a.percent, 0) /
+            progress.quizAttempts.length
+        )
+      : 0;
 
   return (
-    <div className="relative min-h-screen overflow-x-hidden bg-slate-950 text-slate-100">
-      {/* Subtle Ambient Background Glow */}
-      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-        <div className="absolute -top-40 left-1/2 h-96 w-[44rem] -translate-x-1/2 rounded-full bg-indigo-600/20 blur-3xl" />
-        <div className="absolute top-64 right-0 h-80 w-80 rounded-full bg-fuchsia-600/10 blur-3xl" />
-      </div>
-
+    <div className="min-h-screen bg-white text-slate-900 flex flex-col">
       {/* Top Navbar */}
-      <header className="sticky top-0 z-20 border-b border-white/10 bg-slate-950/80 backdrop-blur-md">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3.5 sm:px-6">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-fuchsia-600 shadow-md shadow-indigo-500/25">
-              <GraduationCap className="h-5 w-5 text-white" />
-            </div>
-            <div>
-              <span className="text-base font-bold tracking-tight text-white">
-                LearnForge AI
-              </span>
-              <p className="hidden text-xs text-slate-400 sm:block">
-                Quiz & Course Studio
-              </p>
-            </div>
-          </div>
+      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3.5 sm:px-6">
+          <button
+            type="button"
+            onClick={() => setView("library")}
+            className="text-lg font-bold tracking-tight text-slate-900 cursor-pointer"
+          >
+            LearnBridge
+          </button>
 
-          <nav className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-slate-900/80 p-1">
-            <button
-              type="button"
-              onClick={() => setActiveTab("create")}
-              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition cursor-pointer sm:text-sm ${
-                activeTab === "create"
-                  ? "bg-gradient-to-r from-indigo-500 to-violet-600 text-white shadow"
-                  : "text-slate-300 hover:text-white"
-              }`}
-            >
-              <Sparkles className="h-3.5 w-3.5" />
-              Create
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("quizzes")}
-              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition cursor-pointer sm:text-sm ${
-                activeTab === "quizzes"
-                  ? "bg-gradient-to-r from-indigo-500 to-violet-600 text-white shadow"
-                  : "text-slate-300 hover:text-white"
-              }`}
-            >
-              <BrainCircuit className="h-3.5 w-3.5" />
-              Quizzes ({savedQuizzes.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("courses")}
-              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition cursor-pointer sm:text-sm ${
-                activeTab === "courses"
-                  ? "bg-gradient-to-r from-indigo-500 to-violet-600 text-white shadow"
-                  : "text-slate-300 hover:text-white"
-              }`}
-            >
-              <BookOpen className="h-3.5 w-3.5" />
-              Courses ({savedCourses.length})
-            </button>
+          <nav className="hidden items-center gap-6 text-sm font-medium md:flex">
+            {(
+              [
+                ["library", "Library"],
+                ["course-studio", "Course Studio"],
+                ["quiz-studio", "Quiz Studio"],
+                ["progress", "My Progress"],
+              ] as const
+            ).map(([key, label]) => {
+              const active = view === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setView(key)}
+                  className={`border-b-2 py-1 transition cursor-pointer ${
+                    active
+                      ? "border-slate-900 font-semibold text-slate-900"
+                      : "border-transparent text-slate-500 hover:text-slate-900"
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+            })}
           </nav>
+
+          <div className="flex items-center gap-2.5">
+            {user ? (
+              <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-[11px] text-white">
+                  {user.name[0]?.toUpperCase() || "U"}
+                </span>
+                <span className="hidden sm:inline">{user.name}</span>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  title="Log out"
+                  className="ml-1 text-slate-400 hover:text-slate-700 cursor-pointer"
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowAuthModal(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+              >
+                <UserPlus className="h-3.5 w-3.5" />
+                Sign Up
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setView("course-studio")}
+              className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 cursor-pointer sm:text-sm"
+            >
+              New Course
+            </button>
+          </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
-        {/* Global Error Banner */}
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6">
         {errorMsg && (
-          <div className="mb-6 flex items-start justify-between gap-3 rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-sm text-rose-200">
-            <div className="flex items-start gap-2.5">
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-400" />
+          <div className="mb-6 flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0" />
               <span>{errorMsg}</span>
             </div>
             <button
               type="button"
               onClick={() => setErrorMsg(null)}
-              className="text-xs font-semibold text-rose-300 hover:text-white cursor-pointer"
+              className="text-xs font-semibold hover:underline cursor-pointer"
             >
               Dismiss
             </button>
           </div>
         )}
 
-        {/* TAB 1: CREATE */}
-        {activeTab === "create" && (
+        {/* VIEW 1: LIBRARY */}
+        {view === "library" && (
           <div className="space-y-8">
-            {/* Hero Section */}
-            <section className="rounded-3xl border border-white/10 bg-gradient-to-br from-slate-900/90 via-slate-900/70 to-indigo-950/60 p-6 shadow-2xl sm:p-8">
-              <div className="inline-flex items-center gap-2 rounded-full border border-indigo-400/30 bg-indigo-500/10 px-3 py-1 text-xs font-semibold text-indigo-300">
-                <Sparkles className="h-3.5 w-3.5" />
-                Powered by Gemini AI & MongoDB Atlas
+            {/* Hero */}
+            <div className="flex flex-col justify-between gap-6 border-b border-slate-200 pb-8 md:flex-row md:items-end">
+              <div>
+                <h1 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
+                  Learning Library & Assessment Studio
+                </h1>
+                <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600 sm:text-base">
+                  Study structured multi-module courses, track lesson mastery, and
+                  generate custom multiple-choice quizzes powered by Google Gemini
+                  and persisted in MongoDB Atlas.
+                </p>
               </div>
-              <h1 className="mt-3 text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
-                Learn any topic in seconds.
+
+              <div className="flex shrink-0 items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setView("course-studio")}
+                  className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 cursor-pointer"
+                >
+                  Generate Course
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setView("quiz-studio")}
+                  className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-50 cursor-pointer"
+                >
+                  Generate Quiz
+                </button>
+              </div>
+            </div>
+
+            {/* Filter Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1 text-xs font-medium">
+                  {(
+                    [
+                      ["all", `All (${courses.length + quizzes.length})`],
+                      ["courses", `Courses (${courses.length})`],
+                      ["quizzes", `Quizzes (${quizzes.length})`],
+                    ] as const
+                  ).map(([val, label]) => (
+                    <button
+                      key={val}
+                      type="button"
+                      onClick={() => setTypeFilter(val)}
+                      className={`rounded-lg px-3 py-1.5 transition cursor-pointer ${
+                        typeFilter === val
+                          ? "bg-white font-semibold text-slate-900 shadow-xs"
+                          : "text-slate-500 hover:text-slate-900"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1 text-xs font-medium">
+                  {(["All", "Beginner", "Intermediate", "Advanced"] as const).map(
+                    (lvl) => (
+                      <button
+                        key={lvl}
+                        type="button"
+                        onClick={() => setLevelFilter(lvl)}
+                        className={`rounded-lg px-3 py-1.5 transition cursor-pointer ${
+                          levelFilter === lvl
+                            ? "bg-white font-semibold text-slate-900 shadow-xs"
+                            : "text-slate-500 hover:text-slate-900"
+                        }`}
+                      >
+                        {lvl}
+                      </button>
+                    )
+                  )}
+                </div>
+              </div>
+
+              <div className="relative w-full sm:w-64">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Filter by topic or title..."
+                  className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-blue-500"
+                />
+              </div>
+            </div>
+
+            {loading ? (
+              <div className="flex items-center justify-center py-16 text-sm text-slate-500">
+                <Loader2 className="mr-2 h-5 w-5 animate-spin text-blue-600" />
+                Loading library from MongoDB Atlas...
+              </div>
+            ) : (
+              <>
+                {/* Courses Section */}
+                {typeFilter !== "quizzes" && (
+                  <section className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-lg font-bold text-slate-900">
+                        Courses
+                      </h2>
+                      <span className="text-xs text-slate-500">
+                        {filteredCourses.length} courses
+                      </span>
+                    </div>
+
+                    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                      {filteredCourses.map((course, idx) => {
+                        const totalLessons = course.modules.reduce(
+                          (sum, m) => sum + m.lessons.length,
+                          0
+                        );
+                        const doneCount = (
+                          progress.completedLessons[course.id] || []
+                        ).length;
+                        const pct =
+                          totalLessons > 0
+                            ? Math.round((doneCount / totalLessons) * 100)
+                            : 0;
+
+                        return (
+                          <div
+                            key={course.id}
+                            className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs transition hover:shadow-md"
+                          >
+                            <PastelCover index={idx} />
+
+                            <div className="flex flex-1 flex-col justify-between p-5">
+                              <div>
+                                <p className="text-xs font-medium text-slate-500">
+                                  {course.difficulty} · {course.modules.length}{" "}
+                                  module{course.modules.length > 1 ? "s" : ""} ·{" "}
+                                  {course.estimated_minutes} min
+                                </p>
+                                <h3 className="mt-1.5 text-base font-bold text-slate-900">
+                                  {course.title}
+                                </h3>
+                                <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-slate-600">
+                                  {course.description}
+                                </p>
+                              </div>
+
+                              <div className="mt-5 space-y-3">
+                                <div>
+                                  <div className="mb-1 flex items-center justify-between text-xs text-slate-500">
+                                    <span className="inline-flex items-center gap-1">
+                                      <CheckCircle2 className="h-3.5 w-3.5 text-slate-400" />
+                                      {doneCount} / {totalLessons} lessons
+                                    </span>
+                                    <span>{pct}%</span>
+                                  </div>
+                                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                                    <div
+                                      className="h-full rounded-full bg-blue-600 transition-all"
+                                      style={{ width: `${pct}%` }}
+                                    />
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center justify-between border-t border-slate-100 pt-3">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActiveCourse(course);
+                                      setView("view-course");
+                                    }}
+                                    className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
+                                  >
+                                    Open Course
+                                    <ArrowRight className="h-3.5 w-3.5" />
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      void handleDeleteCourse(course.id)
+                                    }
+                                    title="Delete course"
+                                    className="text-slate-400 hover:text-rose-600 cursor-pointer"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+                )}
+
+                {/* Quizzes Section */}
+                {typeFilter !== "courses" && (
+                  <section className="space-y-4 pt-2">
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-lg font-bold text-slate-900">
+                        Assessments & Quizzes
+                      </h2>
+                      <span className="text-xs text-slate-500">
+                        {filteredQuizzes.length} quizzes
+                      </span>
+                    </div>
+
+                    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                      {filteredQuizzes.map((quiz) => {
+                        const latestAttempt = progress.quizAttempts.find(
+                          (a) => a.quizId === quiz.id
+                        );
+
+                        return (
+                          <div
+                            key={quiz.id}
+                            className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-5 shadow-xs transition hover:shadow-md"
+                          >
+                            <div>
+                              <p className="text-xs font-medium text-slate-500">
+                                {quiz.difficulty} · {quiz.questions.length}{" "}
+                                questions · {quiz.topic}
+                              </p>
+                              <h3 className="mt-1.5 text-base font-bold text-slate-900">
+                                {quiz.title}
+                              </h3>
+                              <p className="mt-1.5 text-xs leading-relaxed text-slate-600">
+                                Evaluate your understanding of {quiz.topic} with
+                                instant answer grading and explanations.
+                              </p>
+
+                              {latestAttempt && (
+                                <span className="mt-3 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">
+                                  Last score: {latestAttempt.score}/
+                                  {latestAttempt.total} ({latestAttempt.percent}%)
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="mt-5 flex items-center justify-between border-t border-slate-100 pt-3">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setActiveQuiz(quiz);
+                                  setView("take-quiz");
+                                }}
+                                className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3.5 py-2 text-xs font-semibold text-white hover:bg-slate-800 cursor-pointer"
+                              >
+                                <HelpCircle className="h-3.5 w-3.5" />
+                                Start Quiz
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => void handleDeleteQuiz(quiz.id)}
+                                title="Delete quiz"
+                                className="text-slate-400 hover:text-rose-600 cursor-pointer"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* VIEW 2: COURSE STUDIO */}
+        {view === "course-studio" && (
+          <div className="mx-auto max-w-2xl rounded-2xl border border-slate-200 bg-white p-8 shadow-xs">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+              <Sparkles className="h-3.5 w-3.5" /> AI Course Studio
+            </span>
+            <h1 className="mt-3 text-2xl font-bold text-slate-900">
+              Generate a New Course
+            </h1>
+            <p className="mt-1 text-sm text-slate-600">
+              Enter any subject. LearnBridge uses Google Gemini to build modules
+              and lessons, then saves it to MongoDB Atlas.
+            </p>
+
+            <form onSubmit={(e) => void handleGenerateCourse(e)} className="mt-6 space-y-5">
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                  Course Topic
+                </label>
+                <input
+                  type="text"
+                  value={courseTopic}
+                  onChange={(e) => setCourseTopic(e.target.value)}
+                  placeholder="e.g., Python Decorators, Neural Networks, SQL Indexing"
+                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <div className="mb-1.5 flex justify-between text-xs font-semibold text-slate-700">
+                  <span>Number of Modules</span>
+                  <span className="text-blue-600">{numModules}</span>
+                </div>
+                <input
+                  type="range"
+                  min={1}
+                  max={6}
+                  value={numModules}
+                  onChange={(e) => setNumModules(Number(e.target.value))}
+                  className="w-full accent-blue-600"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={generating !== null}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60 cursor-pointer"
+              >
+                {generating === "course" ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Generating Course with Gemini...
+                  </>
+                ) : (
+                  "Generate & Save Course"
+                )}
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* VIEW 3: QUIZ STUDIO */}
+        {view === "quiz-studio" && (
+          <div className="mx-auto max-w-2xl rounded-2xl border border-slate-200 bg-white p-8 shadow-xs">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+              <Sparkles className="h-3.5 w-3.5" /> AI Quiz Studio
+            </span>
+            <h1 className="mt-3 text-2xl font-bold text-slate-900">
+              Generate a New Assessment Quiz
+            </h1>
+            <p className="mt-1 text-sm text-slate-600">
+              Create a custom multiple-choice quiz saved straight to MongoDB
+              Atlas.
+            </p>
+
+            <form onSubmit={(e) => void handleGenerateQuiz(e)} className="mt-6 space-y-5">
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+                  Quiz Topic
+                </label>
+                <input
+                  type="text"
+                  value={quizTopic}
+                  onChange={(e) => setQuizTopic(e.target.value)}
+                  placeholder="e.g., Python Lists, REST APIs, Database Normalization"
+                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <div className="mb-1.5 flex justify-between text-xs font-semibold text-slate-700">
+                  <span>Number of Questions</span>
+                  <span className="text-blue-600">{numQuestions}</span>
+                </div>
+                <input
+                  type="range"
+                  min={1}
+                  max={12}
+                  value={numQuestions}
+                  onChange={(e) => setNumQuestions(Number(e.target.value))}
+                  className="w-full accent-blue-600"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={generating !== null}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60 cursor-pointer"
+              >
+                {generating === "quiz" ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Generating Quiz with Gemini...
+                  </>
+                ) : (
+                  "Generate & Start Quiz"
+                )}
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* VIEW 4: MY PROGRESS & RESULTS */}
+        {view === "progress" && (
+          <div className="space-y-8">
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900">
+                {user ? `${user.name}'s Learning Progress` : "My Progress & Results"}
               </h1>
-              <p className="mt-2 max-w-2xl text-sm text-slate-300 sm:text-base">
-                Type any subject below to generate an interactive multiple-choice
-                quiz or a multi-module course—automatically saved to your library.
+              <p className="mt-1 text-sm text-slate-600">
+                Track every course you study, AI items you generated, and all
+                quiz results.
               </p>
+            </div>
 
-              {/* Sample Topic Chips */}
-              <div className="mt-5 flex flex-wrap items-center gap-2">
-                <span className="text-xs font-medium text-slate-400">
-                  Try:
-                </span>
-                {SAMPLE_TOPICS.map((sample) => (
-                  <button
-                    key={sample}
-                    type="button"
-                    onClick={() => setTopic(sample)}
-                    className="rounded-full border border-white/10 bg-slate-800/80 px-3 py-1 text-xs font-medium text-slate-200 transition hover:border-indigo-400/50 hover:bg-slate-800 cursor-pointer"
-                  >
-                    {sample}
-                  </button>
-                ))}
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-5">
+                <p className="text-xs font-medium text-slate-500">
+                  Lessons Completed
+                </p>
+                <p className="mt-1 text-2xl font-bold text-slate-900">
+                  {totalLessonsCompleted}
+                </p>
               </div>
-
-              {/* Topic Input */}
-              <div className="mt-4">
-                <input
-                  type="text"
-                  value={topic}
-                  onChange={(e) => setTopic(e.target.value)}
-                  placeholder="Enter any topic (e.g., Python Decorators, Photosynthesis, World War II)..."
-                  className="w-full rounded-2xl border border-white/15 bg-slate-950/80 px-4 py-3.5 text-sm text-white placeholder-slate-500 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 sm:text-base"
-                />
+              <div className="rounded-2xl border border-slate-200 bg-blue-50/60 p-5">
+                <p className="text-xs font-medium text-blue-700">
+                  Quizzes Taken
+                </p>
+                <p className="mt-1 text-2xl font-bold text-slate-900">
+                  {progress.quizAttempts.length}
+                </p>
               </div>
+              <div className="rounded-2xl border border-slate-200 bg-emerald-50/60 p-5">
+                <p className="text-xs font-medium text-emerald-700">
+                  Average Quiz Score
+                </p>
+                <p className="mt-1 text-2xl font-bold text-slate-900">
+                  {avgQuizScore}%
+                </p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-violet-50/60 p-5">
+                <p className="text-xs font-medium text-violet-700">
+                  Generated by You
+                </p>
+                <p className="mt-1 text-2xl font-bold text-slate-900">
+                  {progress.generatedIds.length}
+                </p>
+              </div>
+            </div>
 
-              {/* Two Generator Cards */}
-              <div className="mt-6 grid gap-4 md:grid-cols-2">
-                {/* Quiz Card */}
-                <div className="flex flex-col justify-between rounded-2xl border border-white/10 bg-slate-950/60 p-5">
-                  <div>
-                    <div className="flex items-center gap-2.5">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-500/15 text-indigo-400">
-                        <BrainCircuit className="h-5 w-5" />
-                      </div>
+            {/* Quiz Attempts History */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
+              <h2 className="flex items-center gap-2 text-lg font-bold text-slate-900">
+                <Trophy className="h-5 w-5 text-amber-500" />
+                Quiz Results History
+              </h2>
+              {progress.quizAttempts.length === 0 ? (
+                <p className="mt-3 text-sm text-slate-500">
+                  No quizzes taken yet. Start any quiz from the Library!
+                </p>
+              ) : (
+                <div className="mt-4 divide-y divide-slate-100">
+                  {progress.quizAttempts.map((a, idx) => (
+                    <div
+                      key={idx}
+                      className="flex flex-wrap items-center justify-between gap-3 py-3"
+                    >
                       <div>
-                        <h2 className="text-base font-bold text-white">
-                          Multiple-Choice Quiz
-                        </h2>
-                        <p className="text-xs text-slate-400">
-                          Instant scoring & explanations
+                        <p className="text-sm font-semibold text-slate-900">
+                          {a.quizTitle}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {a.topic} ·{" "}
+                          {new Date(a.takenAt).toLocaleString()}
                         </p>
                       </div>
+                      <span
+                        className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                          a.percent >= 70
+                            ? "bg-emerald-50 text-emerald-700"
+                            : "bg-amber-50 text-amber-700"
+                        }`}
+                      >
+                        {a.score} / {a.total} ({a.percent}%)
+                      </span>
                     </div>
-
-                    <div className="mt-4">
-                      <div className="mb-1.5 flex justify-between text-xs font-medium text-slate-300">
-                        <span>Questions</span>
-                        <span className="font-bold text-indigo-300">
-                          {numQuestions}
-                        </span>
-                      </div>
-                      <input
-                        type="range"
-                        min={1}
-                        max={15}
-                        value={numQuestions}
-                        onChange={(e) => setNumQuestions(Number(e.target.value))}
-                        className="w-full accent-indigo-500 cursor-pointer"
-                      />
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    disabled={generating !== null}
-                    onClick={() => void handleGenerateQuiz()}
-                    className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-500/25 transition hover:brightness-110 disabled:opacity-60 cursor-pointer"
-                  >
-                    {generating === "quiz" ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Generating Quiz...
-                      </>
-                    ) : (
-                      <>
-                        Generate Quiz
-                        <ArrowRight className="h-4 w-4" />
-                      </>
-                    )}
-                  </button>
+                  ))}
                 </div>
-
-                {/* Course Card */}
-                <div className="flex flex-col justify-between rounded-2xl border border-white/10 bg-slate-950/60 p-5">
-                  <div>
-                    <div className="flex items-center gap-2.5">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-fuchsia-500/15 text-fuchsia-400">
-                        <BookOpen className="h-5 w-5" />
-                      </div>
-                      <div>
-                        <h2 className="text-base font-bold text-white">
-                          Structured Course
-                        </h2>
-                        <p className="text-xs text-slate-400">
-                          Modules with bite-sized lessons
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="mt-4">
-                      <div className="mb-1.5 flex justify-between text-xs font-medium text-slate-300">
-                        <span>Modules</span>
-                        <span className="font-bold text-fuchsia-300">
-                          {numModules}
-                        </span>
-                      </div>
-                      <input
-                        type="range"
-                        min={1}
-                        max={8}
-                        value={numModules}
-                        onChange={(e) => setNumModules(Number(e.target.value))}
-                        className="w-full accent-fuchsia-500 cursor-pointer"
-                      />
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    disabled={generating !== null}
-                    onClick={() => void handleGenerateCourse()}
-                    className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-fuchsia-500 to-purple-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-fuchsia-500/25 transition hover:brightness-110 disabled:opacity-60 cursor-pointer"
-                  >
-                    {generating === "course" ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Building Course...
-                      </>
-                    ) : (
-                      <>
-                        Generate Course
-                        <ArrowRight className="h-4 w-4" />
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            </section>
-
-            {/* Generated Result */}
-            {activeQuiz && <QuizView key={activeQuiz.id} quiz={activeQuiz} />}
-            {activeCourse && (
-              <CourseView key={activeCourse.id} course={activeCourse} />
-            )}
+              )}
+            </div>
           </div>
         )}
 
-        {/* TAB 2: SAVED QUIZZES */}
-        {activeTab === "quizzes" && (
-          <div className="space-y-6">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="relative flex-1 min-w-[220px]">
-                <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search saved quizzes by title or topic..."
-                  className="w-full rounded-xl border border-white/10 bg-slate-900/80 py-2.5 pl-10 pr-4 text-sm text-white placeholder-slate-500 outline-none focus:border-indigo-500"
-                />
-              </div>
-              <button
-                type="button"
-                onClick={() => void loadLibrary()}
-                className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-slate-900 px-4 py-2.5 text-sm font-medium text-slate-200 hover:bg-slate-800 cursor-pointer"
-              >
-                <RefreshCw
-                  className={`h-4 w-4 ${loadingLibrary ? "animate-spin" : ""}`}
-                />
-                Refresh
-              </button>
-            </div>
-
-            {filteredQuizzes.length === 0 ? (
-              <div className="rounded-2xl border border-white/10 bg-slate-900/50 p-10 text-center text-sm text-slate-400">
-                No saved quizzes found. Create your first one in the Create tab!
-              </div>
-            ) : (
-              <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
-                <div className="space-y-2">
-                  {filteredQuizzes.map((q) => {
-                    const isSelected = selectedSavedQuiz?.id === q.id;
-                    return (
-                      <button
-                        key={q.id}
-                        type="button"
-                        onClick={() => setSelectedSavedQuiz(q)}
-                        className={`w-full rounded-xl border p-3.5 text-left transition cursor-pointer ${
-                          isSelected
-                            ? "border-indigo-500 bg-indigo-500/15"
-                            : "border-white/10 bg-slate-900/60 hover:border-white/20"
-                        }`}
-                      >
-                        <p className="line-clamp-1 text-sm font-semibold text-white">
-                          {q.title}
-                        </p>
-                        <p className="mt-1 text-xs text-slate-400">
-                          {q.topic} • {q.questions.length} Qs
-                        </p>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div>
-                  {selectedSavedQuiz && (
-                    <QuizView
-                      key={selectedSavedQuiz.id}
-                      quiz={selectedSavedQuiz}
-                    />
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
+        {/* VIEW 5: COURSE VIEWER */}
+        {view === "view-course" && activeCourse && (
+          <CourseView
+            key={activeCourse.id}
+            course={activeCourse}
+            completedLessons={progress.completedLessons[activeCourse.id] || []}
+            onToggleLesson={(lessonKey) =>
+              setProgress(toggleLessonProgress(user, activeCourse.id, lessonKey))
+            }
+            onBack={() => setView("library")}
+          />
         )}
 
-        {/* TAB 3: SAVED COURSES */}
-        {activeTab === "courses" && (
-          <div className="space-y-6">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="relative flex-1 min-w-[220px]">
-                <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search saved courses by title or topic..."
-                  className="w-full rounded-xl border border-white/10 bg-slate-900/80 py-2.5 pl-10 pr-4 text-sm text-white placeholder-slate-500 outline-none focus:border-fuchsia-500"
-                />
-              </div>
-              <button
-                type="button"
-                onClick={() => void loadLibrary()}
-                className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-slate-900 px-4 py-2.5 text-sm font-medium text-slate-200 hover:bg-slate-800 cursor-pointer"
-              >
-                <RefreshCw
-                  className={`h-4 w-4 ${loadingLibrary ? "animate-spin" : ""}`}
-                />
-                Refresh
-              </button>
-            </div>
-
-            {filteredCourses.length === 0 ? (
-              <div className="rounded-2xl border border-white/10 bg-slate-900/50 p-10 text-center text-sm text-slate-400">
-                No saved courses found. Create your first one in the Create tab!
-              </div>
-            ) : (
-              <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
-                <div className="space-y-2">
-                  {filteredCourses.map((c) => {
-                    const isSelected = selectedSavedCourse?.id === c.id;
-                    return (
-                      <button
-                        key={c.id}
-                        type="button"
-                        onClick={() => setSelectedSavedCourse(c)}
-                        className={`w-full rounded-xl border p-3.5 text-left transition cursor-pointer ${
-                          isSelected
-                            ? "border-fuchsia-500 bg-fuchsia-500/15"
-                            : "border-white/10 bg-slate-900/60 hover:border-white/20"
-                        }`}
-                      >
-                        <p className="line-clamp-1 text-sm font-semibold text-white">
-                          {c.title}
-                        </p>
-                        <p className="mt-1 text-xs text-slate-400">
-                          {c.topic} • {c.modules.length} modules
-                        </p>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div>
-                  {selectedSavedCourse && (
-                    <CourseView
-                      key={selectedSavedCourse.id}
-                      course={selectedSavedCourse}
-                    />
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
+        {/* VIEW 6: QUIZ PLAYER */}
+        {view === "take-quiz" && activeQuiz && (
+          <QuizView
+            key={activeQuiz.id}
+            quiz={activeQuiz}
+            onBack={() => setView("library")}
+            onSubmitAttempt={(score, total, percent) =>
+              setProgress(
+                recordQuizResult(user, {
+                  quizId: activeQuiz.id,
+                  quizTitle: activeQuiz.title,
+                  topic: activeQuiz.topic,
+                  score,
+                  total,
+                  percent,
+                  takenAt: new Date().toISOString(),
+                })
+              )
+            }
+          />
         )}
       </main>
+
+      {/* Footer */}
+      <footer className="border-t border-slate-200 bg-slate-50/50 py-5 text-xs text-slate-500">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 sm:px-6">
+          <span>LearnBridge — AI Quiz and Course Generator</span>
+          <div className="flex items-center gap-5">
+            <button
+              type="button"
+              onClick={() => setView("library")}
+              className="hover:text-slate-900 cursor-pointer"
+            >
+              Library
+            </button>
+            <button
+              type="button"
+              onClick={() => setView("course-studio")}
+              className="hover:text-slate-900 cursor-pointer"
+            >
+              Course Studio
+            </button>
+            <button
+              type="button"
+              onClick={() => setView("quiz-studio")}
+              className="hover:text-slate-900 cursor-pointer"
+            >
+              Quiz Studio
+            </button>
+            <button
+              type="button"
+              onClick={() => setView("progress")}
+              className="hover:text-slate-900 cursor-pointer"
+            >
+              My Progress
+            </button>
+          </div>
+        </div>
+      </footer>
+
+      {showAuthModal && (
+        <AuthModal
+          onClose={() => setShowAuthModal(false)}
+          onSuccess={handleAuthSuccess}
+        />
+      )}
     </div>
   );
 }

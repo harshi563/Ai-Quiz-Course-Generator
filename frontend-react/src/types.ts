@@ -10,6 +10,8 @@ export interface SavedQuiz {
   created_at: string;
   topic: string;
   title: string;
+  difficulty: string;
+  estimated_minutes: number;
   questions: QuizQuestion[];
 }
 
@@ -31,5 +33,29 @@ export interface SavedCourse {
   topic: string;
   title: string;
   description: string;
+  difficulty: string;
+  estimated_minutes: number;
   modules: CourseModule[];
+}
+
+export interface UserProfile {
+  name: string;
+  email: string;
+  password: string;
+}
+
+export interface QuizAttempt {
+  quizId: string;
+  quizTitle: string;
+  topic: string;
+  score: number;
+  total: number;
+  percent: number;
+  takenAt: string;
+}
+
+export interface UserProgress {
+  completedLessons: Record<string, string[]>;
+  quizAttempts: QuizAttempt[];
+  generatedIds: string[];
 }

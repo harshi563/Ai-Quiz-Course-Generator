@@ -52,3 +52,13 @@ export async function fetchCourses(): Promise<SavedCourse[]> {
   const res = await fetch(`${API_BASE}/courses`);
   return handleResponse<SavedCourse[]>(res);
 }
+
+export async function deleteQuiz(quizId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/quizzes/${quizId}`, { method: "DELETE" });
+  await handleResponse<{ deleted: boolean }>(res);
+}
+
+export async function deleteCourse(courseId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/courses/${courseId}`, { method: "DELETE" });
+  await handleResponse<{ deleted: boolean }>(res);
+}
