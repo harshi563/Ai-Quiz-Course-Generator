@@ -1,11 +1,11 @@
 # LearnBridge - AI Quiz and Course Generator
 
-A full-stack learning platform where you enter any topic and generate:
+A full-stack learning platform where users enter any topic and generate:
 1. Interactive multiple-choice quizzes with instant grading and explanations.
 2. Structured courses made of modules and lessons.
 3. Personal progress tracking for completed lessons, generated items, and quiz results.
 
-All generated quizzes and courses are saved to MongoDB Atlas so you can view or retake them anytime.
+All generated quizzes and courses are saved to MongoDB Atlas so users can view or retake them anytime.
 
 ## Tech Stack
 - Language: Python and TypeScript
@@ -15,6 +15,7 @@ All generated quizzes and courses are saved to MongoDB Atlas so you can view or 
 - AI: Google Gemini API (google-genai)
 - Database: MongoDB Atlas (pymongo)
 - Config: .env with python-dotenv
+- Testing: FastAPI Swagger UI (/docs)
 
 ## Project Structure
 ```text
