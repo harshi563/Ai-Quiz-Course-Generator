@@ -1,4 +1,7 @@
+import os
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 
 from backend.db import (
     DatabaseError,
@@ -15,11 +18,28 @@ from backend.models import (
     SavedQuiz,
 )
 
+load_dotenv()
+
 app = FastAPI(
     title="AI Quiz and Course Generator API",
     description="Generates multiple-choice quizzes and structured courses using Google Gemini and saves them to MongoDB.",
     version="1.0.0",
 )
+
+# Allow browser origins listed in CORS_ORIGINS (comma-separated in .env)
+cors_origins = [
+    origin.strip()
+    for origin in os.getenv("CORS_ORIGINS", "").split(",")
+    if origin.strip()
+]
+if cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 
 @app.get("/")
