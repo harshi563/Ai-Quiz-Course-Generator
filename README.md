@@ -1,15 +1,17 @@
-# AI Quiz and Course Generator
+# LearnBridge - AI Quiz and Course Generator
 
-A web app where you enter any topic and generate:
-1. An interactive multiple-choice quiz with instant scoring and explanations.
-2. A structured course made of modules and lessons.
+A full-stack learning platform where you enter any topic and generate:
+1. Interactive multiple-choice quizzes with instant grading and explanations.
+2. Structured courses made of modules and lessons.
+3. Personal progress tracking for completed lessons, generated items, and quiz results.
 
 All generated quizzes and courses are saved to MongoDB Atlas so you can view or retake them anytime.
 
 ## Tech Stack
-- Language: Python
+- Language: Python and TypeScript
 - Backend: FastAPI and Uvicorn
-- Frontend: Streamlit
+- Primary Frontend: React, TypeScript, Tailwind CSS, and Vite (frontend-react)
+- Alternative Frontend: Streamlit (frontend)
 - AI: Google Gemini API (google-genai)
 - Database: MongoDB Atlas (pymongo)
 - Config: .env with python-dotenv
@@ -23,6 +25,19 @@ backend/
   db.py
 frontend/
   app.py
+frontend-react/
+  src/
+    components/
+      AuthModal.tsx
+      CourseView.tsx
+      PastelCovers.tsx
+      QuizView.tsx
+    api.ts
+    App.tsx
+    index.css
+    storage.ts
+    types.ts
+  vite.config.ts
 .env.example
 requirements.txt
 README.md
