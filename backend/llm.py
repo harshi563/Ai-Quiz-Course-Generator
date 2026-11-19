@@ -8,7 +8,7 @@ from pydantic import BaseModel, ValidationError
 
 from backend.models import Course, Quiz
 
-load_dotenv()
+load_dotenv(override=True)
 
 
 class AIServiceError(Exception):
